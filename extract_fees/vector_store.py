@@ -11,8 +11,7 @@ embeddings = HuggingFaceEmbeddings(
     model_kwargs = {'device': 'mps'}
 )
 
-def vector_store(file_path:str, rag_query:str, embeddings = embeddings):
-
+def build_vector_store(file_path, embeddings = embeddings):
     # Load and split
     loader = PyPDFLoader(file_path)
     docs = loader.load()
@@ -25,8 +24,12 @@ def vector_store(file_path:str, rag_query:str, embeddings = embeddings):
 
     # vectorstore = Chroma(embedding_function = embeddings, collection_name="pdf_input")
     vectorstore = Chroma.from_documents(chunks, embedding = embeddings)
+    return vectorstore
 
-    results = vectorstore.similarity_search(rag_query, k=3)
+
+def query_vector_store(vectorstore, rag_query:str):
+
+    results = vectorstore.similarity_search(rag_query, k = 3)
     context = "\n".join([r.page_content for r in results])
 
     return context

@@ -6,16 +6,15 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
-def fee_lookup():
+def fee_lookup(new_fees):
     base_path = Path(__file__).parent.parent
 
     existing_fee_csv = base_path / config["database"]["fee_database"]
-    fee_announcement_csv = base_path /  config["database"]["fee_announcement"]
+
 
     existing_fees = pd.read_csv(existing_fee_csv)
     logger.info(f"Reading Fee Database: {existing_fee_csv}")
-    fee_announcement = pd.read_csv(fee_announcement_csv)
-    logger.info(f"Reading Fee Announcement: {fee_announcement_csv}")
+
 
     # 2. Define a function to find the best match
     def get_fuzzy_match(fee_name, choices, threshold=85):
@@ -30,24 +29,24 @@ def fee_lookup():
     choices = existing_fees["fee_name"].tolist()
 
     logger.info(f"Starting Fuzzy Match")
-    fee_announcement["matched_fee_name"] = fee_announcement["fee_name"].apply(
+    new_fees["matched_fee_name"] = new_fees["fee_name"].apply(
         lambda x: get_fuzzy_match(x, choices)
     )
 
     # 4. Merge the tables
     logger.info(f"Mapping rates in fee_database to fee_announcement_database")
     merged_df = pd.merge(
-        fee_announcement, 
+        new_fees, 
         existing_fees,
-        left_on=["matched_fee_name","country"], 
-        right_on=["fee_name","country"], 
+        left_on=["matched_fee_name","region"], 
+        right_on=["fee_name","region"], 
         how="left",
         suffixes=("_existing", "_announcement")
     )
-
-    merged_df = merged_df.drop(["extracted_at","matched_fee_name","fee_name_announcement","start_date"], axis=1)
+    logger.info(f"Dropping Columns... Renaming Columns.... Ordering Column...")
+    # merged_df = merged_df.drop(["extracted_at","matched_fee_name","fee_name_announcement","start_date"], axis=1)
     merged_df = merged_df.rename(columns={"fee_name_existing":"fee_name"})
-    column_order = ["country", "effective_date", "fee_name","current_rate", "new_rate", "fee_change"]
+    column_order = ["region", "effective_date", "fee_name","current_rate", "new_rate", "change_type"]
     merged_df = merged_df[column_order]
 
     updated_fee_markdown = merged_df.to_markdown(index=False)

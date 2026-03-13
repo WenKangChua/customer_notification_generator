@@ -8,8 +8,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 # Using pydantic BaseModel, define a list of fields and dtype
 class fee_name(BaseModel):
     fee_name:str = Field(description = "The name of the interchange fee or scheme fee")
-    new_rate_percentage:float | None = Field(description = "The new fee rate as express in percentage. Contains only numbers without %")
-    # new_rate_fixed: float | None = Field(description= "The new fee rate as express in absolute number along with the currency.")
+    new_rate:float | None = Field(description = "The new fee rate as express in percentage.")
     effective_date:str = Field(description = "The effective start date or end date of the fee. STRICTLY in YYYY-MM-DD format.")
     region:str | None = Field(description = "The region in which the fee is for.")
     change_type: Literal["new_fee", "updated_fee"] = Field(description = "The type of fee change. The only values allowed are new_fee and updated_fee.")

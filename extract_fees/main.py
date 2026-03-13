@@ -1,4 +1,4 @@
-from vector_store import vector_store
+from vector_store import build_vector_store, query_vector_store
 from local_llm import mini_instruct_model
 from prompt_templates import fee_names_json_prompt_instructions, notification_article_prompt_template, repair_prompt
 import pandas as pd
@@ -18,7 +18,7 @@ datetime_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # initialise file paths and variables
 logger.info("Stage 1: Start extract fee details from input")
 input_file_path = config["input"]["input_pdf_path"]
-rag_query = config["input"]["fee_extract_query"]
+rag_query ="Please find all relevant acquirer fees, rates, country, effective date, currency."
 max_retries = 3
 
 # From my PDF, get relevant context through similiarity search
@@ -27,8 +27,8 @@ max_retries = 3
 logger.info(f"Reading file from: {input_file_path}")
 logger.info(f"Query for RAG: {rag_query}")
 
-context = vector_store(file_path = input_file_path, rag_query = rag_query)
-
+vector_store = build_vector_store(file_path = input_file_path)
+context = query_vector_store(vector_store, rag_query = rag_query)
 logger.info(f"RAG Context Output:\n {context}")
 
 prompt = fee_names_json_prompt_instructions()
@@ -62,28 +62,27 @@ logger.info("Stage 2: Start update fee database")
 
 output_file = base_path / config["output"]["output_path_fee_announcement_csv"]
 new_fees = pd.DataFrame(response)
-new_fees.insert(column="extracted_at", loc=0, value=datetime_now)
-logger.info(f"Inserting data: {new_fees.head()}")
+updated_fee_table_markdown = fee_lookup(new_fees)
 
-new_fees.to_csv(output_file, index=False, mode='a', header=False)
-logger.info("Data added to fee_announcement.csv\n")
+
 logger.info("Stage 2: Finish update fee database")
 ### End of Stage 2
 
 ### Start of Stage 3
 logger.info("Stage 3: Start generating system notification")
-updated_fee_table_markdown = fee_lookup()
-file_path = "/Users/wenkangchua/Documents/GitHub/customer_notification_generator/extract_fees/input/m_an11539_en-us 2025-04-15.pdf"
-question = "Give me details on what had change and the retional behind it."
-context = vector_store(file_path=file_path, rag_query=question)
+rag_query = "Give me details on what had change and the retional behind it."
+context = query_vector_store(vector_store, rag_query = rag_query)
 
-prompt = notification_article_prompt_template(context=context, updated_fee_table_markdown=updated_fee_table_markdown)
-response = mini_instruct_model(prompt=prompt)
+prompt = notification_article_prompt_template(context = context, updated_fee_table_markdown = updated_fee_table_markdown)
+logger.info("Generating system notification")
+response = mini_instruct_model(prompt = prompt)
 
 article_notification = response
 
 output_file_name = datetime_now + "_results.md"
+logger.info(f"System notification saved in {output_file_name}")
 
 with open(base_path / config["output"]["output_notification_path"] / output_file_name, "w", encoding="utf-8") as f:
     f.write(article_notification)
+logger.info("Completed generating system notification")
 ### End of Stage 3
