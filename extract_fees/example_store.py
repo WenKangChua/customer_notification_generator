@@ -3,7 +3,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from pathlib import Path
 from datetime import datetime
-import json
+from vector_store import embeddings
 
 from vector_store import *
 from config import config
@@ -12,12 +12,6 @@ from langchain_community.document_loaders import PyPDFLoader
 base_path = Path(__file__).parent.parent
 example_store_dir = base_path / "database/chroma_db/example_store"
 datetime_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-mpnet-base-v2",
-    model_kwargs={'device': 'mps'}
-)
 
 def get_example_store():
     return Chroma(

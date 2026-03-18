@@ -4,89 +4,119 @@ from prompt_templates import *
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
-import json
+from example_store import add_example
 from fee_lookup import fee_lookup
 from validation import validate_output, strip_markdown_fences
 from config import config
 from io import StringIO
 from logger import get_logger
+from system_commands import open_file
 
 logger = get_logger(__name__)
 base_path = Path(__file__).parent.parent    
 datetime_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-### Start of stage 1
-# initialise file paths and variables
-logger.info("Stage 1: Start extract fee details from input")
-input_file_path = config["input"]["input_pdf_path"]
-rag_query ="Please find all relevant acquirer fees, rates, country, effective date, currency."
-max_retries = 3
+def stage_one():
+    ## Start of stage 1
+    ### To extract fee information
 
-# From my PDF, get relevant context through similiarity search
-# Format instruction prompt with system user tag to ensure json output
-# Pass the prompt and context into phi4 chat model from huggingface
-logger.info(f"Reading file from: {input_file_path}")
-logger.info(f"Query for RAG: {rag_query}")
+    # initialise file paths and variables
+    logger.info("Stage 1: Start extract fee details from input")
+    input_file_path = config["input"]["input_pdf_path"]
+    rag_query ="Please find all relevant acquirer fees, rates, country, effective date, currency."
+    max_retries = 3
 
-vector_store = build_vector_store(file_path = input_file_path)
-context = query_vector_store(vector_store, rag_query = rag_query)
-logger.info(f"RAG Context Output:\\n {context}")
+    # From my PDF, get relevant context through similiarity search
+    # Format instruction prompt with system user tag to ensure json output
+    # Pass the prompt and context into phi4 chat model from huggingface
+    logger.info(f"Reading file from: {input_file_path}")
+    logger.info(f"Query for RAG: {rag_query}")
 
-prompt = fee_names_prompt_instructions_with_examples(example_query = rag_query)
-logger.info(f"Invoking Prompt...")
+    vector_store = build_vector_store(file_path = input_file_path)
+    pdf_context = query_vector_store(vector_store, rag_query = rag_query)
 
-extract_fees_kwargs = {"prompt":prompt, "query":rag_query, "context":context}
+    prompt = fee_names_prompt_instructions_with_examples(example_query = rag_query)
+    logger.info(f"Invoking Prompt...")
 
-for attempt in range(max_retries):
-    response = mini_instruct_model(**extract_fees_kwargs)
-    response = strip_markdown_fences(response)
-    valid, result = validate_output(response)
-    if valid:
-        logger.info(f"Valid output on attempt {attempt + 1}")
-        break
+    extract_fees_kwargs = {"prompt":prompt, "query":rag_query, "context":pdf_context}
+
+    for attempt in range(max_retries):
+        csv_output = mini_instruct_model(**extract_fees_kwargs)
+        csv_output = strip_markdown_fences(csv_output)
+        valid, result = validate_output(csv_output)
+        if valid:
+            logger.info(f"Valid output on attempt {attempt + 1}")
+            break
+        else:
+            logger.warning(f"Attempt {attempt + 1} failed: {result} Output: {csv_output}")
+            if attempt < max_retries - 1:
+                logger.info("Repairing prompt...")
+                prompt = repair_prompt()
+                repair_kwargs = {"prompt":prompt, "previous_output":csv_output, "error":result}
+                extract_fees_kwargs = repair_kwargs
     else:
-        logger.warning(f"Attempt {attempt + 1} failed: {result} Output: {response}")
-        if attempt < max_retries - 1:
-            logger.info("Repairing prompt...")
-            prompt = repair_prompt()
-            repair_kwargs = {"prompt":prompt, "previous_output":response, "error":result}
-            extract_fees_kwargs = repair_kwargs
-else:
-    logger.error(f"Failed to get valid output after {max_retries} attempts. Last error: {result}")
+        logger.error(f"Failed to get valid output after {max_retries} attempts. Last error: {result}")
 
-# response = json.loads(response)["fee_names"]
-logger.info(f"Output:\n {response}")
-logger.info("Stage 1: Finish extract fee details from input")
-### End of stage 1
+    # response = json.loads(response)["fee_names"]
+    logger.info(f"Output:\n {csv_output}")
+    logger.info("Stage 1: Finish extract fee details from input")
 
+    return csv_output, pdf_context
+    ### End of stage 1
 
-### Start of Stage 2
-logger.info("Stage 2: Finding existing fees")
+def stage_two(csv_output):
+    ## Start of Stage 2
+    ### To look up fees in database for old rates
+    logger.info("Stage 2: Finding existing fees")
 
-new_fees = pd.read_csv(StringIO(response))
-logger.info(f"Dataframe output:\n\n {new_fees}")
-# breakpoint()
-updated_fee_table_markdown = fee_lookup(new_fees)
+    new_fees = pd.read_csv(StringIO(csv_output))
+    logger.info(f"Dataframe output:\n\n {new_fees}")
+    # breakpoint()
+    updated_fee_table_markdown = fee_lookup(new_fees)
 
+    logger.info("Stage 2: End finding existing fees")
 
-logger.info("Stage 2: End finding existing fees")
-### End of Stage 2
+    return updated_fee_table_markdown
+    ### End of Stage 2
 
-### Start of Stage 3
-logger.info("Stage 3: Start generating system notification")
-rag_query = "Give me details on what had change and the retional behind it."
-context = query_vector_store(vector_store, rag_query = rag_query)
+def stage_three(pdf_context, updated_fee_table_markdown, csv_output):
+    ## Start of Stage 3
+    ### Generate the notification
+    logger.info("Stage 3: Start generating system notification")
+    output_file_name = datetime_now + "_results.md"
+    output_file_path = base_path / config["output"]["output_notification_path"] / output_file_name
+    
+    logger.info("Generating system notification")
+    prompt = notification_article_prompt_template(context = pdf_context, updated_fee_table_markdown = updated_fee_table_markdown)
+    system_notification = mini_instruct_model(prompt = prompt)
+    system_notification_csv_output = "------ CSV Ouput ------\n\n" + csv_output + "\n\n------ System Notification -----\n\n" + system_notification
+    
+    logger.info(f"Saving System notification in {output_file_name}")
+    with open(output_file_path, "w", encoding="utf-8") as f:
+        f.write(system_notification_csv_output)
 
-prompt = notification_article_prompt_template(context = context, updated_fee_table_markdown = updated_fee_table_markdown)
-logger.info("Generating system notification")
-response = mini_instruct_model(prompt = prompt)
+    logger.info(f"Completed generating system notification: {output_file_name}")
+    return output_file_path
+    ### End of Stage 3
 
-article_notification = response
+def stage_four(output_file_path):
+    ## Start of Stage 4
+    ### To add the csv and notification into example_store
+    while True:
+        logger.info(f"Please review and edit the notification before continuing.")
+        open_file(output_file_path)
+        save = input("Save csv output to vectore store? It may be used as an example in the future. (Y/N)").strip().lower()
+        if save == "y":
+            add_example(context = pdf_context, csv_output = csv_output)
+            logger.info(f"{output_file_path} have been added to example store")
+        else:
+            break
+    ### End of stage 4
 
-output_file_name = datetime_now + "_results.md"
-logger.info(f"System notification saved in {output_file_name}")
-
-with open(base_path / config["output"]["output_notification_path"] / output_file_name, "w", encoding="utf-8") as f:
-    f.write(article_notification)
-logger.info("Completed generating system notification")
-### End of Stage 3
+if __name__ == "__main__":
+    logger.info(f"Start of process")
+    csv_output, pdf_context = stage_one()
+    updated_fee_table_markdown = stage_two(csv_output)
+    output_file_name = stage_three(pdf_context, updated_fee_table_markdown)
+    stage_four(output_file_name)
+    logger.info(f"End of process")

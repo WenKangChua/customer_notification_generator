@@ -5,16 +5,16 @@ from functools import lru_cache
 from langchain_core.prompts import ChatPromptTemplate
 from config import config
 
-# model_id = "microsoft/Phi-4-mini-instruct"
-model_id = "mistralai/Ministral-3-3B-Instruct-2512"
+model_id = "microsoft/Phi-4-mini-instruct"
+# model_id = "mistralai/Mistral-7B-Instruct-v0.3"
 
 @lru_cache(maxsize=1)
 def _load_chat_model():
   
     pipe = pipeline(
         "text-generation",
-        model=model_id,
-        model_kwargs={
+        model = model_id,
+        model_kwargs = {
             "dtype": torch.bfloat16,
             "device_map": "mps"
         },
@@ -23,10 +23,10 @@ def _load_chat_model():
         return_full_text=False
     )
    # Wrap it in LangChain's HuggingFacePipeline
-    llm = HuggingFacePipeline(pipeline=pipe)
+    llm = HuggingFacePipeline(pipeline = pipe)
 
     # Use ChatHuggingFace to handle the <|system|> and <|user|> tags automatically
-    chat_model = ChatHuggingFace(llm=llm)
+    chat_model = ChatHuggingFace(llm = llm)
 
     return chat_model
 

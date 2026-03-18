@@ -2,13 +2,17 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # This file is used for embedding a pdf file, running similarity search and returning the result
 
 # Embed and store
 embeddings = HuggingFaceEmbeddings(
-    model_name = "sentence-transformers/all-mpnet-base-v2",
-    model_kwargs = {'device': 'mps'}
+    # model_name = "sentence-transformers/all-mpnet-base-v2",
+    model_name = "BAAI/bge-m3",
+    model_kwargs={'device': 'mps'}
 )
 
 def build_vector_store(file_path, embeddings = embeddings):
@@ -36,5 +40,6 @@ def query_vector_store(vectorstore, rag_query:str, k:int = 3):
 
     results = vectorstore.similarity_search(rag_query, k = k)
     context = "\n".join([r.page_content for r in results])
+    logger.info("\nRAG Context:\n" + str([r.page_content for r in results]))
 
     return context

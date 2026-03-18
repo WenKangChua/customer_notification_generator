@@ -12,7 +12,7 @@ class fee_name(BaseModel):
     effective_date:str = Field(description = "The effective start date or end date of the fee. STRICTLY in YYYY-MM-DD format.")
     region:str | None = Field(description = "The region in which the fee is for.")
     currency:str = Field(description = "The currency of the fees.")
-    change_type: Literal["new_fee", "updated_fee"] = Field(description = "The only values allowed are new_fee and updated_fee.")
+    change_type: Literal["new_fee", "updated_fee", "deleted_fee"] = Field(description = "The only values allowed are new_fee and updated_fee.")
 
 # # Enables a list of fee_name
 # class fee_name_list(BaseModel):

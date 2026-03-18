@@ -20,20 +20,21 @@ def fee_names_prompt_instructions_with_examples(example_query:str = None):
         "system", 
         """
         Analyse the context given and extract the fees information according to the rules and provide only csv output without conversation text.
+        
         ### Rules:
-        1)There can be more than one rows.\n
-        2)Enclose all fields in quotes.\n
-        3)Use only these csv headers - {headers}\n
-        4)Adhere to these field descriptions when extracting fees information - {column_description}
+        1. There can be more than one rows.\n
+        2. Enclose all fields in quotes.\n
+        3. Use only these csv headers - {headers}\n
+        4. Adhere to these field descriptions when extracting fees information - {column_description}
         """
         )
     ]
 
     # Retrieve example
-    examples = retrieve_examples(query = example_query)
-    for example in examples:
-        messages.append(("user", f"Example Context:\n{example["context"]} \n\nExample Question: {example_query}"))
-        messages.append(("assistant", example["csv_output"]))
+    # examples = retrieve_examples(query = example_query)
+    # for example in examples:
+    #     messages.append(("user", f"Example Context:\n{example["context"]} \n\nExample Question: {example_query}"))
+    #     messages.append(("assistant", example["csv_output"]))
 
     messages.append(("user", "Context:\n{context}. \n\nQuestion:\n{query}"))
 
@@ -46,15 +47,14 @@ def fee_names_prompt_instructions_with_examples(example_query:str = None):
         headers = headers,
         column_description = column_description
     )
-    logger.info(format_instruction_prompt)
+    logger.info("\n" + str(format_instruction_prompt))
     return format_instruction_prompt
 
 def repair_prompt():
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", """
-             You are a system that fixes invalid JSON outputs.
-             STRICTLY generate ONLY raw JSON, do not include markdown code fences, backticks, or any conversational text.
+             You are a system that fixes invalid csv outputs.
              """
              ),
             (
@@ -74,9 +74,9 @@ def notification_article_prompt_template(updated_fee_table_markdown:str, context
         [
         ("system", 
         """
-        You are a professional financial communications expert from stripe. Your task is to write a detailed, article-style announcement you have received regarding fee changes.
+        You are a professional financial communications expert. Your task is to write a detailed, article-style announcement you have received regarding fee changes.
 
-        LOGICAL RULES FOR THE ARTICLE:
+        ### LOGICAL RULES FOR THE ARTICLE:
         1. NARRATIVE SOURCE: Use the "Context" extracted from the PDF to explain the business rationale.
         2. ACTION IDENTIFIER: 
         - If `fee_change` is "updated_fee", describe it as a REVISION of an existing fee.
@@ -85,10 +85,9 @@ def notification_article_prompt_template(updated_fee_table_markdown:str, context
         - For REVISIONS, include both the Current Rate and New Rate.
         - For INTRODUCTIONS, list the Current Rate as "N/A" or "-" and state that this is a new billing event.
         4. TONE: Maintain a professional, corporate tone suitable for an official customer notification.
-        5. Do not include these information
-        - Anything about Technical Resource Center or Pricing Guide
+        5. DO NOT INCLUDE anything about Technical Resource Center or Pricing Guide.
 
-        REQUIRED STRUCTURE:
+        ### REQUIRED STRUCTURE:
         1. Headline: A clear, professional title.
         2. BODY:
             - Always start the paragraph with effective date, the region or country, and the business purpose. Keep it to one short paragraph.
@@ -105,6 +104,6 @@ def notification_article_prompt_template(updated_fee_table_markdown:str, context
         """
         )  
         ]
-    ).partial(context=context, updated_fee_table_markdown=updated_fee_table_markdown )
+    ).partial(context = context, updated_fee_table_markdown=updated_fee_table_markdown )
 
     return prompt
